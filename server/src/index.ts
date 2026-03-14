@@ -1,6 +1,7 @@
 // CivicOS API Server
 // Civic transparency platform. Built in the USA.
 import express from "express";
+import path from "path";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -19,7 +20,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- SECURITY ---
-app.use(helmet());
+// Relaxed CSP for dev — allows inline scripts from Vite build
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:5173",
@@ -74,11 +81,22 @@ app.use("/api/notifications", notificationsRouter);
 app.use("/api", pressureRouter);
 app.use("/api/upload", uploadRouter);
 
+// --- STATIC FILES ---
+// Serve the built React app from client/dist — single port, no proxy
+const clientDist = path.resolve(__dirname, "../../client/dist");
+app.use(express.static(clientDist));
+
+// SPA fallback — any non-API route serves index.html
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api")) return next();
+  res.sendFile(path.join(clientDist, "index.html"));
+});
+
 // --- ERROR HANDLING ---
 app.use(errorHandler);
 
 // --- START ---
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   logger.info(`CivicOS API running on port ${PORT}`, {
     env: process.env.NODE_ENV || "development",
     port: PORT,
